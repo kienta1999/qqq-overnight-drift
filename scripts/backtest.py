@@ -43,10 +43,13 @@ import pandas as pd
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_HERE)
 DATA = os.path.join(_ROOT, "data", "daily.parquet")
+ETF_DIR = os.path.join(_ROOT, "data")
 SPY_DAILY = os.path.join(_ROOT, "..", "sp500-intraday-ranker", "data", "market",
                          "SPY_daily.parquet")
 
 TRADING_DAYS = 252
+SMA_WINDOW = 200                                     # trend filter on QQQ
+RVOL_WINDOW = 20                                     # realized-vol regime window
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -91,6 +94,54 @@ def rsi(close: pd.DataFrame, n: int) -> pd.DataFrame:
     roll_dn = down.ewm(alpha=1 / n, min_periods=n, adjust=False).mean()
     rs = roll_up / roll_dn.replace(0, np.nan)
     return 100 - 100 / (1 + rs)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The DEPLOYED strategy: overnight-QQQ + 200d-trend with a vol-regime instrument
+# switch (see scripts/regime_switch.py). Trades only 3 ETFs, so it carries NO
+# survivorship bias — unlike the 721-name universe rules below. Simulated here
+# under the SAME per-side cost convention as every other row for a fair table.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def vol_switch(start, cost_bps: float, lo: float = 0.18, hi: float = 0.28):
+    """Daily return series of the deployed vol-regime overnight strategy.
+
+    Signal = QQQ's own close vs its 200d SMA (in-market only above it) plus QQQ's
+    20d realized vol picking the instrument that night: rvol<lo -> TQQQ (3x),
+    rvol>hi -> QQQ (1x), else QLD (2x). Each ETF earns its OWN actual overnight
+    return (open_{t+1}/close_t - 1), so leverage decay is real. Cash (0) on
+    off-trend nights. Returns (ret, invested) aligned to dates >= `start`.
+    """
+    def load(sym):
+        df = pd.read_csv(os.path.join(ETF_DIR, f"{sym}_daily_yf.csv"),
+                         parse_dates=["Date"]).set_index("Date").sort_index()
+        return df["Open"].rename(f"{sym}_o"), df["Close"].rename(f"{sym}_c")
+
+    cols = {}
+    for s in ("QQQ", "QLD", "TQQQ"):
+        o, c = load(s)
+        cols[f"{s}_o"], cols[f"{s}_c"] = o, c
+    df = pd.concat(cols, axis=1)
+    df.columns = list(cols)                          # flatten to plain names
+
+    overnight = {s: df[f"{s}_o"].shift(-1) / df[f"{s}_c"] - 1
+                 for s in ("QQQ", "QLD", "TQQQ")}    # close_t -> open_{t+1}
+
+    c = df["QQQ_c"]
+    in_trend = c > c.rolling(SMA_WINDOW).mean()      # decided at today's close
+    rvol = c.pct_change().rolling(RVOL_WINDOW).std() * np.sqrt(TRADING_DAYS)
+    choice = pd.Series("QLD", index=df.index)
+    choice = choice.where(rvol >= lo, "TQQQ").where(rvol <= hi, "QQQ")
+
+    cost = 2 * cost_bps / 1e4                         # round-trip on invested nights
+    ret = pd.Series(0.0, index=df.index)
+    for s in ("QQQ", "QLD", "TQQQ"):
+        pick = (choice == s) & in_trend
+        ret = ret.where(~pick, overnight[s] - cost)
+    ret = ret.where(in_trend, 0.0).where(overnight["QQQ"].notna())   # drop last NaN night
+
+    keep = df.index >= pd.Timestamp(start)
+    return ret[keep], (in_trend & keep)[keep]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -170,6 +221,15 @@ def main() -> int:
     ap.add_argument("--start", default="2016", help="Start year/date (default 2016).")
     ap.add_argument("--rsi-buy", type=float, default=10.0,
                     help="Only enter MR names with RSI2 below this (default 10).")
+    ap.add_argument("--lo", type=float, default=0.18,
+                    help="Vol-switch: QQQ rvol below this -> TQQQ (3x). Default 0.18.")
+    ap.add_argument("--hi", type=float, default=0.28,
+                    help="Vol-switch: QQQ rvol above this -> QQQ (1x). Default 0.28.")
+    ap.add_argument("--etf-cost-bps", type=float, default=0.1,
+                    help="Per-side cost for the deployed ETF row ONLY (default 0.1). "
+                         "IBKR Lite = $0 commission and MOC/MOO fills clear at the "
+                         "auction price (no spread), so ETF cost ~0; the small-cap "
+                         "basket rules keep the higher --cost-bps.")
     args = ap.parse_args()
 
     w = load_wide(args.min_dollar_vol, args.start)
@@ -188,6 +248,14 @@ def main() -> int:
     K, C = args.k, args.cost_bps
 
     results = {}
+
+    # ---- DEPLOYED strategy: overnight-QQQ + trend + vol-regime switch ----
+    # Aligned to the same first date as the universe panel so the whole table
+    # covers one identical window. Priced at its OWN realistic cost (--etf-cost-bps):
+    # commission-free ETFs filled at the MOC/MOO auction print carry ~no spread,
+    # unlike the small-cap baskets below which really do pay ~5bps/side.
+    results["qqq_vol_switch"] = vol_switch(
+        close.index.min(), args.etf_cost_bps, args.lo, args.hi)
 
     # ---- OVERNIGHT (enter close_t, exit next open) ----
     valid_on = overnight.notna()
@@ -229,6 +297,25 @@ def main() -> int:
     print(f"  INTRADAY / OVERNIGHT RULE BACKTEST   K={K}  cost={C}bps/side  "
           f"$vol>{args.min_dollar_vol/1e6:.0f}M  since {close.index.min().date()}")
     print("=" * 78)
+    print("  Columns:")
+    print("    CAGR   = compound annual growth rate, net of costs (higher better)")
+    print("    Sharpe = annualized return / volatility; risk-adjusted edge (>0 = beats cash)")
+    print("    MaxDD  = worst peak-to-trough equity drawdown (closer to 0 better)")
+    print("    Hit%   = share of invested days that ended positive")
+    print("    AvgBps = average net return per invested day, in basis points (1bp=0.01%)")
+    print("    Days   = number of days actually holding a position (in-market)")
+    print("  Strategies (all net of cost, no lookahead):")
+    print("    qqq_vol_switch   DEPLOYED: hold QQQ/QLD/TQQQ overnight only while QQQ is above")
+    print("                     its 200d trend; leverage picked from QQQ's 20d realized vol")
+    print("    overnight_all    buy EVERY liquid name at close, sell next open (overnight drift)")
+    print("    mr_overnight     buy the K most-oversold names (low RSI2), sell next open (bounce)")
+    print("    mom_overnight    buy the K strongest 5-day movers, sell next open (momentum)")
+    print("    random_overnight buy K RANDOM names overnight -- the dartboard / luck baseline")
+    print("    mr_1day          like mr_overnight but hold a full day (close -> next close)")
+    print("    gap_fade         buy the K biggest gap-DOWNS at the open, sell same close (revert)")
+    print("    gap_mom          buy the K biggest gap-UPS at the open, sell same close (continue)")
+    print("    SPY buy&hold     just own SPY the whole time -- the 'do nothing' benchmark")
+    print("=" * 78)
     print(f"{'strategy':<18}{'CAGR':>8}{'Sharpe':>8}{'MaxDD':>8}"
           f"{'Hit%':>7}{'AvgBps':>8}{'Days':>7}")
     print("-" * 78)
@@ -237,8 +324,9 @@ def main() -> int:
     for name, (ret, inv) in results.items():
         s = stats(ret, inv)
         rows[name] = ret
+        tag = "  <- DEPLOYED (winner)" if name == "qqq_vol_switch" else ""
         print(f"{name:<18}{s['CAGR']:>7.1%}{s['Sharpe']:>8.2f}{s['MaxDD']:>8.1%}"
-              f"{s['HitRate']:>7.1%}{s['AvgBps']:>8.1f}{s['DaysInvested']:>7d}")
+              f"{s['HitRate']:>7.1%}{s['AvgBps']:>8.1f}{s['DaysInvested']:>7d}{tag}")
 
     sp = stats(spy_ret)
     print(f"{'SPY buy&hold':<18}{sp['CAGR']:>7.1%}{sp['Sharpe']:>8.2f}"
@@ -247,13 +335,22 @@ def main() -> int:
 
     # Per-year for the headline strategies vs SPY.
     print("\nPer-year total return (net):")
-    show = ["mr_overnight", "mom_overnight", "random_overnight", "gap_fade",
-            "overnight_all"]
+    show = ["qqq_vol_switch", "mr_overnight", "mom_overnight", "random_overnight",
+            "gap_fade", "overnight_all"]
     yr = pd.DataFrame({n: per_year(rows[n]) for n in show})
     yr["SPY"] = per_year(spy_ret)
     print((yr * 100).round(1).to_string())
 
     print("\nNotes:")
+    print(" * 'qqq_vol_switch' is THIS repo's deployed strategy (scripts/regime_switch.py):")
+    print("   overnight-QQQ + 200d-trend, instrument (QQQ/QLD/TQQQ) picked from QQQ's 20d")
+    print("   realized vol. Only 3 ETFs -> no survivorship bias; only in-market above the")
+    print(f"   200d trend (see 'Days').")
+    print(f" * COSTS DIFFER BY ROW ON PURPOSE. qqq_vol_switch pays {args.etf_cost_bps}bps/side")
+    print("   (IBKR Lite = $0 commission; MOC/MOO orders fill at the auction price so there is")
+    print("   no spread to cross). ETF expense ratios (QQQ .20% / QLD .95% / TQQQ .84% per yr)")
+    print("   are already inside the real ETF prices, so they are NOT subtracted again. The")
+    print(f"   small-cap basket rules below pay the full {C}bps/side (real spread on churned names).")
     print(" * 'random_overnight' is the dartboard — a strategy must clear it to be real.")
     print(" * overnight/same-day strategies rebalance daily → they pay the cost every")
     print(f"   invested day (2×{C}bps). Try --cost-bps 0 to see the gross edge.")

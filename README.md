@@ -95,10 +95,14 @@ risks before using leverage.
 ### 🔵 Running today's pick
 
 ```bash
-uv run python scripts/today.py                       # AUTO-picks QQQ/QLD/TQQQ, $10k
+uv run python scripts/today.py                       # 📅 RUN THIS DAILY — auto-picks QQQ/QLD/TQQQ, $10k
 uv run python scripts/today.py --capital 5000         # auto, smaller account
 uv run python scripts/today.py --instrument QLD       # force a fixed instrument (override)
 ```
+
+> 📅 **The one command to run every afternoon** is `uv run python scripts/today.py`.
+> (The `daily_panel.py` / `backtest.py` commands further down are one-time / research
+> only — you do **not** run those daily.)
 
 `today.py` now prints the day's realized vol and the instrument the regime
 picks, e.g. `20d realized vol: 22.8% -> QLD (mid vol)`. Force a fixed one with
