@@ -1,4 +1,4 @@
-# qqq-day-trade
+# qqq-overnight-drift
 
 We set out to find a transparent if/else rule that beats the market for a **$10k
 account**. Most candidates lose to just buying SPY (see the research journey
@@ -345,7 +345,7 @@ pivoted to the QQQ index-timing rule at the top of this doc.
 
 ## Execution (not yet wired)
 
-Reuse `ml-stock-forward-return/scripts/{check_ibkr_conn,execute_picks}.py` —
+Reuse `ranker-21d-sp500/scripts/{check_ibkr_conn,execute_picks}.py` —
 `ib_async`, WSL→Windows Gateway, staged `print`/`whatif`/`live` modes, circuit
 breakers. IBKR account `U27177562` (open, to be funded ~$10k). **Paper
 (port 4002) until a rule survives out-of-sample + forward paper tracking.**

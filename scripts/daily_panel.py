@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build a daily OHLC panel from the sibling repo's 5-minute bar cache.
 
-We do NOT re-download anything: sp500-intraday-ranker already backfilled 10y of
+We do NOT re-download anything: ranker-5d-sp500 already backfilled 10y of
 split-adjusted SIP 5-minute bars for ~721 point-in-time S&P members. This script
 collapses each ticker's RTH 5-min bars into one row per session:
 
@@ -31,7 +31,7 @@ import pandas as pd
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_HERE)
 # The 5-minute cache lives in the sibling repo; we read it, never write to it.
-RAW_DIR = os.path.join(_ROOT, "..", "sp500-intraday-ranker", "data", "raw")
+RAW_DIR = os.path.join(_ROOT, "..", "ranker-5d-sp500", "data", "raw")
 DATA_DIR = os.path.join(_ROOT, "data")
 OUT_PATH = os.path.join(DATA_DIR, "daily.parquet")
 
@@ -71,7 +71,7 @@ def main() -> int:
 
     raw = os.path.abspath(RAW_DIR)
     if not os.path.isdir(raw):
-        sys.exit(f"5-min cache not found at {raw} — is sp500-intraday-ranker present?")
+        sys.exit(f"5-min cache not found at {raw} — is ranker-5d-sp500 present?")
 
     files = sorted(glob(os.path.join(raw, "*.parquet")))
     if args.limit:

@@ -575,7 +575,7 @@ wheels = [
 ]
 
 [[package]]
-name = "qqq-day-trade"
+name = "qqq-overnight-drift"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

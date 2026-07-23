@@ -32,7 +32,7 @@ from datetime import datetime, timedelta, timezone
 
 # Reuse the sibling's Alpaca client (same keys live in this repo's .env too).
 _HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(_HERE, "..", "..", "sp500-intraday-ranker", "scripts"))
+sys.path.insert(0, os.path.join(_HERE, "..", "..", "ranker-5d-sp500", "scripts"))
 from alpaca_client import get_client, BAR_1DAY, fetch_bars  # noqa: E402
 
 SMA_WINDOW = 200

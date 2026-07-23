@@ -25,7 +25,7 @@ import pandas as pd
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_HERE)
-SPY = os.path.join(_ROOT, "..", "sp500-intraday-ranker", "data", "market",
+SPY = os.path.join(_ROOT, "..", "ranker-5d-sp500", "data", "market",
                    "SPY_daily.parquet")
 TD = 252
 

@@ -1,5 +1,5 @@
 [project]
-name = "qqq-day-trade"
+name = "qqq-overnight-drift"
 version = "0.1.0"
 description = "Overnight-QQQ + 200d-trend strategy with a vol-regime instrument switch (QQQ/QLD/TQQQ)."
 requires-python = ">=3.11"

@@ -44,7 +44,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_HERE)
 DATA = os.path.join(_ROOT, "data", "daily.parquet")
 ETF_DIR = os.path.join(_ROOT, "data")
-SPY_DAILY = os.path.join(_ROOT, "..", "sp500-intraday-ranker", "data", "market",
+SPY_DAILY = os.path.join(_ROOT, "..", "ranker-5d-sp500", "data", "market",
                          "SPY_daily.parquet")
 
 TRADING_DAYS = 252
