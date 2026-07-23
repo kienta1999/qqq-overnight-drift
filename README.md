@@ -87,10 +87,52 @@ Backtest: `python scripts/regime_switch.py`. Each ETF's **own actual overnight
 return** is used (real leveraged-ETF decay, not synthetic 2×/3×).
 
 **Caveat:** because it sits in TQQQ ~70% of the time, it inherits TQQQ's
-bull-flattered, no-dot-com-test caveat — it is strictly *better than* picking one
-instrument, not risk-free. The 1× overnight+trend rule remains the only piece
-validated across the full 27 years incl. the dot-com bust (see below). Read the
-risks before using leverage.
+bull-flattered sample — it is strictly *better than* picking one instrument, not
+risk-free. TQQQ itself never traded the dot-com bust. But we no longer rely on
+that gap: the whole vol-switch has now been stress-tested back to 2000 with
+calibrated-synthetic leverage, and it survives — see next. Read the risks before
+using leverage.
+
+### Stress-tested through the crashes it never traded ⭐
+
+The honest hole in the table above: TQQQ was born Feb 2010, so the deployed
+window (2010–2026) is *entirely* post-GFC — it had never touched the dot-com
+crash or 2008. We closed that gap. QQQ data runs to 1999, and the survival
+mechanism is the **200-day trend filter, not the leverage**, so we can
+reconstruct the missing years faithfully:
+
+- **Signals use real QQQ only** (SMA, realized vol) — zero synthetic data drives
+  any decision.
+- **Leveraged *payoff* before inception is synthetic:** `overnight_Lx =
+  L × overnight_QQQ − drag`, calibrated against the real ETFs in overlap (OLS
+  slope **1.97 / 2.95**, correlation **0.989 / 0.997**; drag 0.6 bp/night for 2×,
+  1.1 bp/night for 3×). Real QLD is used from 2006, real TQQQ from 2010.
+- Crucially, during the crashes the rule is mostly **in cash**, so the synthetic
+  payoff barely touches the survival result — it only fills the minority of
+  in-market (and mostly de-levered) nights.
+
+Full deployed vol-switch, 2000–2026, net 0.5 bp/side (`scripts/crisis_backtest.py`):
+
+| Period | CAGR | Sharpe | MaxDD | In-market | vs QQQ buy&hold |
+|---|---:|---:|---:|---:|---|
+| **Full 2000–2026** | **+24.2%** | **1.19** | −33.5% | 74% | QQQ −83% in 2000–03 |
+| Dot-com bust 2000–2002 | +0.6% | 0.11 | −18.3% | **24%** | flat vs −83% carnage |
+| Dot-com + recovery 2000–2004 | +13.8% | 0.99 | −24.0% | 45% | ended +40% |
+| GFC 2007–2009 | +21.1% | 1.29 | −16.0% | 61% | *made money* |
+| 2022 bear | −9.3% | −1.51 | −9.5% | **7%** | vs QQQ o/n −20.5% |
+| Deployed era 2010–2026 | +29.1% | 1.25 | −33.5% | 85% | — |
+
+**The trend filter is what saves it.** In the dot-com bust it parked in cash 76%
+of nights and came out *flat* while QQQ fell −83% (a leveraged buy-&-hold would
+have been wiped out). In 2022 it was in cash 93% of nights. It doesn't earn in a
+crash — it **steps aside**, then re-engages into the recovery (GFC: +21%, Sharpe
+1.29). Across the full 27 years spanning both crashes it holds Sharpe **1.19**,
+so the edge is *not* a post-2010 tech-bull artifact.
+
+**Still a caveat, not a live record:** pre-2010 leverage is synthetic (well
+calibrated, but synthetic), and none of the deployed ETFs have traded a crash
+*live*. This is strong out-of-sample evidence with a sound survival mechanism —
+the gate remains forward paper-tracking.
 
 ### 🔵 Running today's pick
 
@@ -144,9 +186,12 @@ execution later).
 
 ### ⚠️ Risks — read before using leverage or real money
 
-1. **Bull-flattered sample.** TQQQ/QLD numbers lean on 2010–2026, the best decade
-   ever for leveraged tech. TQQQ has **no dot-com test** (it didn't exist). QLD
-   surviving 2008 (+4%/yr) is the main out-of-sample comfort.
+1. **Bull-flattered sample (mitigated, not eliminated).** TQQQ/QLD real numbers
+   lean on 2010–2026, the best decade ever for leveraged tech, and TQQQ never
+   traded the dot-com bust. The calibrated-synthetic stress test back to 2000
+   (above) shows the full vol-switch *survives* both crashes via the trend
+   filter — but pre-2010 leverage is reconstructed, not lived. QLD surviving 2008
+   (+4%/yr) is the main *real*-data out-of-sample comfort.
 2. **The drawdowns are brutal.** QLD −36%, TQQQ −50%. Sharpe looks calm; the
    equity curve will not. Most people bail at the bottom and miss the recovery.
 3. **Overnight gap / tail risk.** You hold *while asleep*. A ~33% overnight gap in
