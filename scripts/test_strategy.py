@@ -56,6 +56,24 @@ def test_synthetic_only_fills_pre_inception():
     assert DRAG["TQQQ"] > DRAG["QLD"] > 0
 
 
+def test_sizing_never_overdraws():
+    from execute import shares_for
+    # a close 0.4% above the sizing snapshot still fits inside the cash balance
+    qty = shares_for(10_000, 90.17, 50.0)
+    assert qty == 110 and qty * 90.17 * 1.004 <= 10_000
+    assert shares_for(10_000, 20_000, 50.0) == 0          # too expensive -> no order
+    assert shares_for(0, 90.0, 50.0) == 0
+
+
+def test_order_types_are_the_auction_orders():
+    from execute import build_order
+    buy = build_order("buy", "QLD", 110, "U1")
+    assert (buy.action, buy.orderType, buy.tif) == ("BUY", "MOC", "DAY")
+    sell = build_order("sell", "QLD", 110, "U1")
+    assert (sell.action, sell.orderType, sell.tif) == ("SELL", "MKT", "OPG")
+    assert buy.outsideRth is False and sell.account == "U1"
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_"):

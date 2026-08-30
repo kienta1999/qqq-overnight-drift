@@ -84,6 +84,11 @@ barely touches the survival result.
 
 ## Deploy
 
+Two ways to run it: **signal only** (you place the orders at your broker), or
+**automated via IBKR** (the script places them).
+
+### Signal only
+
 Needs free Alpaca market-data keys (no funding, paper account is fine) in `.env`:
 
 ```
@@ -91,7 +96,7 @@ ALPACA_API_KEY=...
 ALPACA_SECRET_KEY=...
 ```
 
-Then, **once per trading day, after ~3:40pm ET:**
+Once per trading day, after ~3:40pm ET:
 
 ```bash
 uv run python scripts/today.py                     # auto-pick instrument, $10k
@@ -99,21 +104,8 @@ uv run python scripts/today.py --capital 5000      # smaller account
 uv run python scripts/today.py --instrument QLD    # override the vol picker
 ```
 
-It prints one of two answers (all times **New York**; subtract 3h in California):
-
-- **BUY 🟢** with an exact share count. Both orders go in the same afternoon —
-  you never wake up for the open:
-  1. **Before 3:45pm ET** (the MOC cutoff): place a **Market-On-Close BUY** →
-     fills at today's 4:00pm close.
-  2. **That evening, once it fills:** place a **Market-On-Open SELL** for the
-     same shares → fills at tomorrow's 9:30am open.
-  3. Sleep. Re-run tomorrow afternoon.
-- **CASH ⚪** — QQQ is below its 200-day average. Place nothing, re-run tomorrow.
-
-Committing to sell at the open sight-unseen is exactly what the backtest assumes
-(official auction prices), so no discretion is needed.
-
-`today.py` is a **signal tool — it does not place orders.** Example output:
+It prints **BUY 🟢** with an exact share count, or **CASH ⚪** (QQQ below its
+200-day average — place nothing). Example:
 
 ```
   QQQ close     : 716.43
@@ -124,16 +116,62 @@ Committing to sell at the open sight-unseen is exactly what the backtest assumes
     $10,000 capital -> BUY 110 QLD @ ~90.17  (~$9,919)
 ```
 
-**Broker notes (verified July 2026):**
-- **Schwab MOC (the BUY): ✅ supported**, must be placed before 3:45pm ET.
-- **Schwab MOO (the SELL): not confirmed** — Schwab's documented order types
-  don't clearly list Market-On-Open. Check your order ticket. If it's absent:
-  (a) queue a plain market SELL (Day) while closed and verify with 1 share that
-  Schwab holds it to the open, (b) be up at 9:30am ET to sell, or (c) run the
-  SELL through **IBKR**, which does support MOO.
-- QQQ/QLD/TQQQ are commission-free at Schwab, and the leverage is *inside* the
-  ETF — **no margin account needed**, and you cannot be margin-called.
-- Overnight holds are **not** PDT day-trades, so the $25k rule doesn't apply.
+### Automated via IBKR
+
+Account **U27177562**, cash-only (no margin — the leverage is inside the ETF).
+Sizing is all-in: `shares = floor(NetLiquidation / price)`.
+
+**First, check the plumbing** (read-only, places nothing):
+
+```bash
+uv run python scripts/ibkr.py --port 4002     # 4002 = Gateway paper
+uv run python scripts/ibkr.py --port 4001     # 4001 = LIVE
+```
+
+**The two daily commands.** `--leg` defaults to `auto`: flat → buy leg, holding
+→ sell leg, so the same command does the right thing at both ends of the day.
+
+```bash
+# 1. Afternoon, BEFORE 3:50pm ET — market-on-close BUY (fills at 16:00)
+uv run python scripts/execute.py --port 4001 --mode live
+
+# 2. That evening (or before 9:28am ET) — market-on-open SELL (fills at 09:30)
+uv run python scripts/execute.py --port 4001 --leg sell --mode live
+```
+
+**Always dry-run first.** Drop `--mode live` for a plan that sends nothing:
+
+```bash
+uv run python scripts/execute.py --port 4001                    # print: plan only
+uv run python scripts/execute.py --port 4001 --mode whatif      # IBKR cost preview
+uv run python scripts/execute.py --port 4001 --capital 2000     # cap the money deployed
+```
+
+Safety rails, all on by default:
+
+| rail | what it does |
+|---|---|
+| `--port` required | no default, so live (4001) vs paper (4002) is always deliberate |
+| staged modes | `print` → `whatif` → `live`; the first two send nothing |
+| typed confirmation | a live `U…` account makes you type the account number |
+| position-aware legs | can't double-buy while holding, can't sell while flat |
+| trend gate | below the 200-day SMA the buy leg is a no-op |
+| `--max-notional` | aborts if buy notional exceeds equity × 1.02 |
+| `--buffer-bps 50` | sizes against a padded price so the close can't overdraw into margin |
+| order cancel | live mode clears working orders before placing |
+| clock warnings | flags a buy past the 15:50 MOC cutoff, or a sell after the open |
+
+Re-running is safe: the script reads your actual IBKR position, so a repeat run
+reconciles rather than duplicating.
+
+**Order types:** the BUY is a true `MOC`, the SELL is `MKT` with `tif=OPG`
+(market-on-open). Both are auction orders, so they fill at the official close and
+open — exactly the prices the backtest assumes. No discretion, and you never have
+to be awake for the open.
+
+**If you'd rather use Schwab:** MOC is supported (before 3:45pm ET), but
+market-on-open is **not confirmed** — check your order ticket. QQQ/QLD/TQQQ are
+commission-free there. Overnight holds are not PDT day-trades either way.
 
 ## Risks
 
@@ -160,6 +198,8 @@ scripts/strategy.py        the rule itself (thresholds, signals) — shared, so 
                            backtest and the daily runner can't drift apart
 scripts/backtest.py        full-history backtest + robustness checks
 scripts/today.py           tonight's decision (Alpaca daily bars)
+scripts/ibkr.py            IB Gateway connection + account snapshot
+scripts/execute.py         places the MOC buy / MOO sell on IBKR
 scripts/test_strategy.py   self-check: no lookahead, cash off-trend, real sleeves
 data/*_daily_yf.csv        QQQ / QLD / TQQQ daily OHLC (yfinance, through 2026-08-28)
 ```

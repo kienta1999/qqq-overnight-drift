@@ -7,4 +7,5 @@ dependencies = [
     "pandas>=2.2",
     "numpy>=1.26",
     "alpaca-py>=0.21",
+    "ib-async>=2.1.0",
 ]
