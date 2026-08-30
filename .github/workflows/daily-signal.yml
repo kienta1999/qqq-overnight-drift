@@ -1,0 +1,83 @@
+name: Daily signal
+
+# Three UTC slots so both DST regimes get a morning and a ~15:40 ET run:
+#   13:40 UTC = 09:40 EDT / 08:40 EST   morning preview (yesterday's close)
+#   19:40 UTC = 15:40 EDT / 14:40 EST   action window
+#   20:40 UTC = 16:40 EDT / 15:40 EST   action window (winter); skipped in summer
+# The job exits early once the ET clock is past 16:00, so the post-close run
+# in summer never overwrites the actionable one.
+on:
+  schedule:
+    - cron: "40 13 * * 1-5"
+    - cron: "40 19 * * 1-5"
+    - cron: "40 20 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      capital:
+        description: "Capital to size the order against"
+        default: "20000"
+
+permissions:
+  issues: write
+
+concurrency: daily-signal          # a slow run can't be overtaken by the next slot
+
+jobs:
+  signal:
+    runs-on: ubuntu-latest
+    env:
+      TITLE: "Today's QQQ overnight decision"
+      CAPITAL: ${{ inputs.capital || '20000' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Skip if the close has already passed
+        run: |
+          H=$(TZ=America/New_York date +%H)
+          if [ "$H" -ge 16 ] && [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "It is ${H}:xx ET — past the close, nothing actionable. Skipping."
+            echo "skip=true" >> "$GITHUB_ENV"
+          fi
+
+      - uses: actions/checkout@v4
+        if: env.skip != 'true'
+
+      - uses: astral-sh/setup-uv@v5
+        if: env.skip != 'true'
+        with:
+          enable-cache: true
+
+      - name: Run the signal
+        if: env.skip != 'true'
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+        run: |
+          uv run --frozen python scripts/today.py --capital "$CAPITAL" | tee signal.txt
+
+      - name: Post it to the pinned issue
+        if: env.skip != 'true'
+        run: |
+          {
+            echo "## $(TZ=America/New_York date '+%a %d %b %Y, %-I:%M %p ET')"
+            echo
+            echo '```'
+            cat signal.txt
+            echo '```'
+            echo
+            echo "The decision line above is dated by the **last QQQ close available**."
+            echo "Same date as today → final. Yesterday → morning preview; the"
+            echo "~15:40 ET run confirms it. A preview only flips if QQQ crosses its"
+            echo "200-day average intraday, and the gap to that average is printed above."
+            echo
+            echo "[Run log](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          } > body.md
+
+          cat body.md >> "$GITHUB_STEP_SUMMARY"
+
+          NUM=$(gh issue list --state open --limit 100 --json number,title \
+                --jq ".[] | select(.title == \"$TITLE\") | .number" | head -1)
+          if [ -z "$NUM" ]; then
+            gh issue create --title "$TITLE" --body-file body.md
+          else
+            gh issue edit "$NUM" --body-file body.md
+          fi
