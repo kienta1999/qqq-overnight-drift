@@ -69,12 +69,51 @@ jobs:
             echo '```'
             cat signal.txt
             echo '```'
-            echo
-            echo "The decision line above is dated by the **last QQQ close available**."
-            echo "Same date as today → final. Yesterday → morning preview; the"
-            echo "~15:40 ET run confirms it. A preview only flips if QQQ crosses its"
-            echo "200-day average intraday, and the gap to that average is printed above."
-            echo
+          cat <<'FOOTER'
+
+          ### Place it — IBKR Client Portal
+
+          **BUY** · by **12:45 PM PT** / 3:45 PM ET — the 3:50 PM ET exchange cutoff is hard
+
+          | Field | Value |
+          |---|---|
+          | Side | **Buy** |
+          | Quantity | the share count above |
+          | Order Type | **Market on Close** |
+          | Time-in-Force | `Day` (the only one MOC accepts) |
+          | Price Management Algo | leave unchecked |
+
+          Fills at **1:00 PM PT** / 4:00 PM ET, at the official closing price.
+
+          **SELL** · right after the buy fills, ~**1:05 PM PT**
+
+          | Field | Value |
+          |---|---|
+          | Side | **Sell** |
+          | Quantity | the same share count |
+          | Order Type | **Market** |
+          | Time-in-Force | **At the Opening** |
+
+          Fills itself at **6:30 AM PT** / 9:30 AM ET in the opening auction — nothing to do.
+
+          `Market` + `At the Opening` **is** the market-on-open order; IBKR has no "MOO"
+          entry in the order-type list. Leaving the TIF on `Day` gives a plain market
+          order that misses the auction.
+
+          **You can't place both at 12:45.** You are flat until the MOC fills, so a sell
+          then is a short sale and gets rejected. Two sittings, five minutes apart — and
+          the sell is the leg that must not be forgotten.
+
+          **CASH ⚪ → place nothing.** No buy, no sell.
+
+          ---
+
+          **Is this post current?** The `decision for` date above is the last QQQ close
+          available. Same date as today → final. Yesterday → it is the morning preview;
+          the 12:07 PM PT run confirms it. A preview only flips if QQQ crosses its
+          200-day average intraday, and the gap to that average is printed above.
+
+          FOOTER
             echo "[Run log](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           } > body.md
 
