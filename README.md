@@ -84,8 +84,96 @@ barely touches the survival result.
 
 ## Deploy
 
-Two ways to run it: **signal only** (you place the orders at your broker), or
-**automated via IBKR** (the script places them).
+Three ways to run it: the **daily routine** below (a GitHub Action posts the
+signal, you place two orders by hand), **signal only** (run the script
+yourself), or **automated via IBKR** (the script places the orders).
+
+### Daily routine — the one to actually use
+
+**Where the decision lives:**
+
+| Link | What it's for |
+|---|---|
+| [**Today's decision** — issue #1](https://github.com/kienta1999/qqq-overnight-drift/issues/1) | The signal. Same URL every day; the workflow overwrites this one issue. Bookmark it. |
+| [**Actions**](https://github.com/kienta1999/qqq-overnight-drift/actions) | Re-run it by hand if the post is stale. |
+
+A GitHub Action posts to issue #1 at 09:07 / 14:07 / 15:07 ET on weekdays.
+Nothing notifies you — editing an issue body sends no email — so you go and look.
+
+**Check the date first.** On the `decision for YYYY-MM-DD` line:
+
+- **today's date** → final, act on it.
+- **yesterday's date** → stale, or it's the 09:07 morning preview. Go to
+  [Actions](https://github.com/kienta1999/qqq-overnight-drift/actions) →
+  *Daily signal* → **Run workflow**, wait ~40s, refresh the issue.
+
+Yesterday's post is the wrong trade about once every three weeks: over
+2010–2026 the action differs from the prior day on 5.7% of days (2.4% trend
+flips, 4.4% instrument changes). Never reuse it.
+
+**The schedule.** ET is the market; PT is where the operator is. Both zones
+observe DST together, so the 3-hour offset never shifts.
+
+| PT | ET | Do |
+|---|---|---|
+| 12:07 PM | 3:07 PM | fresh signal lands on issue #1 |
+| by **12:45 PM** | **3:45 PM** | place the **MOC buy** — the exchange cutoff is 3:50 PM ET, hard |
+| 1:00 PM | 4:00 PM | the MOC fills, at the official closing price |
+| ~1:05 PM | ~4:05 PM | confirm the fill, then place the **MOO sell** |
+| 6:30 AM next day | 9:30 AM | the sell fills in the opening auction — nothing to do |
+
+**The two orders**, in the IBKR Client Portal order ticket.
+
+*Buy — at 12:45 PT, once the issue says BUY:*
+
+| Field | Value |
+|---|---|
+| Symbol | `QQQ` / `QLD` / `TQQQ`, whichever the issue names |
+| Side | **Buy** |
+| Quantity | the share count from the issue |
+| Order Type | **Market on Close** |
+| Time-in-Force | `Day` — the only one MOC accepts |
+| Price Management Algo | leave **unchecked** |
+
+*Sell — right after the buy fills:*
+
+| Field | Value |
+|---|---|
+| Symbol | the same ETF |
+| Side | **Sell** |
+| Quantity | the same share count |
+| Order Type | **Market** |
+| Time-in-Force | **At the Opening** |
+
+`Market` + `At the Opening` **is** the market-on-open order — IBKR has no "MOO"
+entry in the order-type list. Leaving the TIF on `Day` gives a plain market
+order that fires into continuous trading at 9:30 instead of the opening
+auction, which is not the price the backtest assumes.
+
+**You cannot place both at 12:45.** You are flat until the MOC fills, so a sell
+order at that point is a short sale and gets rejected. Two sittings, five
+minutes apart. The sell is the leg that must not be forgotten — miss it and you
+hold 2×/3× leverage through a full trading day, the exact exposure this
+strategy exists to avoid. Set an alarm.
+
+**If the issue says CASH ⚪, place nothing.** No buy, no sell. Sitting out is
+what produces the drawdown profile.
+
+**The account must be margin-type.** US stocks settle T+1, so a daily round
+trip is always spending unsettled proceeds. A Reg-T **margin** account handles
+that fine; a **cash** account blocks the next buy until the prior sale settles
+— that halves the strategy and accumulates good-faith violations. You never
+borrow a dollar (the leverage is inside the ETF), but the account type has to
+be margin. Check *Settings → Account Configuration*. Overnight holds are never
+PDT day-trades, so pattern-day-trader rules don't apply either way.
+
+**Costs.** IBKR Pro Fixed is $0.005/share, $1.00 minimum per order — about
+$2.60 per round trip at $20k, ~$46/month, ~$555/yr (2.8% of capital, since
+~214 nights/yr are in-market). That is a real ~2.8pp haircut to CAGR and it
+does *not* shrink as the account grows, because per-share pricing scales with
+the low share price of TQQQ. IBKR Lite or any zero-commission broker removes it
+entirely — the order ticket shows the commission before you submit, so check
+what yours says.
 
 ### Signal only
 
@@ -118,7 +206,8 @@ It prints **BUY 🟢** with an exact share count, or **CASH ⚪** (QQQ below its
 
 ### Automated via IBKR
 
-Account **U27177562**, cash-only (no margin — the leverage is inside the ETF).
+Account **U27177562**. No borrowing — the leverage is inside the ETF — but the
+account type must be margin, not cash (see the T+1 settlement note above).
 Sizing is all-in: `shares = floor(NetLiquidation / price)`.
 
 **First, check the plumbing** (read-only, places nothing):
