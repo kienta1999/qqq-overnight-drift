@@ -14,8 +14,9 @@ the crashes are. Sitting in cash all day keeps the good half. The 200-day filter
 is what survives the crashes — it parks in cash *before* them, it does not ride
 them out.
 
-Validated 2000–2026 (27 years, incl. dot-com and 2008), net of 0.5 bp/side:
-**+24.2% CAGR, Sharpe 1.19, MaxDD −33.5%.** Read [Risks](#risks) before using
+Validated 2000–2026 (data through 2026-08-28, incl. dot-com and 2008), net of
+0.5 bp/side:
+**+24.4% CAGR, Sharpe 1.20, MaxDD −33.5%.** Read [Risks](#risks) before using
 leverage or real money.
 
 ---
@@ -45,23 +46,23 @@ comparison, split-half robustness, threshold sensitivity, and the instrument mix
 
 | Period | CAGR | Sharpe | MaxDD | In-market |
 |---|---:|---:|---:|---:|
-| **Full 2000–2026** | **+24.2%** | **1.19** | −33.5% | 74% |
+| **Full 2000–2026** | **+24.4%** | **1.20** | −33.5% | 74% |
 | Dot-com bust 2000–2002 | +0.6% | 0.11 | −18.3% | **24%** |
 | Dot-com + recovery 2000–2004 | +13.8% | 0.99 | −24.0% | 45% |
 | GFC 2007–2009 | +21.1% | 1.29 | −16.0% | 61% |
 | 2022 bear | −9.3% | −1.51 | −9.5% | **7%** |
-| Deployed era 2010–2026 | +29.1% | 1.25 | −33.5% | 85% |
+| Deployed era 2010–2026 | +29.5% | 1.26 | −33.5% | 85% |
 
 **Versus the alternatives** (2010–2026, the window where all three ETFs really
 trade):
 
 | Strategy | CAGR | Sharpe | MaxDD |
 |---|---:|---:|---:|
-| **Vol-switch (deployed)** | **+29.1%** | **1.25** | −33.5% |
-| Always TQQQ (3×) | +34.1% | 1.18 | −49.7% |
-| Always QLD (2×) | +20.9% | 1.09 | −36.2% |
-| Always QQQ (1×) | +10.4% | 1.08 | −19.5% |
-| Overnight QQQ, no trend filter | +12.9% | 1.02 | −27.4% |
+| **Vol-switch (deployed)** | **+29.5%** | **1.26** | −33.5% |
+| Always TQQQ (3×) | +34.7% | 1.19 | −49.7% |
+| Always QLD (2×) | +21.3% | 1.11 | −36.2% |
+| Always QQQ (1×) | +10.6% | 1.10 | −19.5% |
+| Overnight QQQ, no trend filter | +13.0% | 1.03 | −27.4% |
 | QQQ buy & hold | +19.4% | 0.96 | −35.1% |
 
 Over the *full* 2000–2026 window QQQ buy & hold makes +8.7% / Sharpe 0.45 /
@@ -69,7 +70,7 @@ Over the *full* 2000–2026 window QQQ buy & hold makes +8.7% / Sharpe 0.45 /
 drawdown, because it sat out both crashes.
 
 Why it's credible rather than data-mined: both sample halves hold up
-independently (Sharpe 1.35 / 1.17), the threshold plateau is flat (Sharpe ~1.25
+independently (Sharpe 1.33 / 1.21), the threshold plateau is flat (Sharpe ~1.26
 for any lo∈[15%,18%], hi∈[25%,30%]), and it stacks two documented anomalies (the
 overnight/night effect + 200-day trend following) rather than a fitted indicator.
 
@@ -160,5 +161,18 @@ scripts/strategy.py        the rule itself (thresholds, signals) — shared, so 
 scripts/backtest.py        full-history backtest + robustness checks
 scripts/today.py           tonight's decision (Alpaca daily bars)
 scripts/test_strategy.py   self-check: no lookahead, cash off-trend, real sleeves
-data/*_daily_yf.csv        QQQ / QLD / TQQQ daily OHLC (yfinance)
+data/*_daily_yf.csv        QQQ / QLD / TQQQ daily OHLC (yfinance, through 2026-08-28)
+```
+
+Refresh the data with:
+
+```bash
+uv run --with yfinance python -c "
+import yfinance as yf, pandas as pd
+for s in ('QQQ','QLD','TQQQ'):
+    d = yf.download(s, start='1999-01-01', auto_adjust=True, progress=False, actions=False)
+    d.columns = d.columns.get_level_values(0)
+    d[['Open','High','Low','Close','Volume']].dropna().to_csv(f'data/{s}_daily_yf.csv')
+"
+
 ```
