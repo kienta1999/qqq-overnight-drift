@@ -1,16 +1,22 @@
 name: Daily signal
 
-# Three UTC slots so both DST regimes get a morning and a ~15:40 ET run:
-#   13:40 UTC = 09:40 EDT / 08:40 EST   morning preview (yesterday's close)
-#   19:40 UTC = 15:40 EDT / 14:40 EST   action window
-#   20:40 UTC = 16:40 EDT / 15:40 EST   action window (winter); skipped in summer
-# The job exits early once the ET clock is past 16:00, so the post-close run
-# in summer never overwrites the actionable one.
+# GitHub queues scheduled runs at low priority: 5-20 min late is routine and a
+# run can be dropped outright under load. So every slot is placed with ~45 min
+# of slack before the 15:50 ET MOC cutoff, minutes are off the round numbers
+# everyone else schedules on, and there are several slots so one miss is
+# survivable.
+#   13:07 UTC = 09:07 EDT / 08:07 EST   morning preview (yesterday's close)
+#   18:07 UTC = 14:07 EDT / 13:07 EST   early check
+#   19:07 UTC = 15:07 EDT / 14:07 EST   action window (summer: 43 min of slack)
+#   20:07 UTC = 16:07 EDT / 15:07 EST   action window (winter); skipped in summer
+# The job exits early once the ET clock is past 16:00, so a post-close run can
+# never overwrite the last actionable one.
 on:
   schedule:
-    - cron: "40 13 * * 1-5"
-    - cron: "40 19 * * 1-5"
-    - cron: "40 20 * * 1-5"
+    - cron: "7 13 * * 1-5"
+    - cron: "7 18 * * 1-5"
+    - cron: "7 19 * * 1-5"
+    - cron: "7 20 * * 1-5"
   workflow_dispatch:
     inputs:
       capital:
