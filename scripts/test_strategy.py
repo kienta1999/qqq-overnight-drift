@@ -74,27 +74,35 @@ def test_order_types_are_the_auction_orders():
     assert buy.outsideRth is False and sell.account == "U1"
 
 
-def test_intraday_masks_do_not_peek_at_the_close_they_trade_into():
-    """An intraday short opens at today's OPEN, so its filter must be lagged a
-    day. Unlagged, `close < SMA` sees the very close it is trading into -- which
-    turned a losing rule into a fake Sharpe 1.9."""
+def test_intraday_filters_must_be_lagged_a_day():
+    """Tested and rejected: shorting QQQ open->close. Keeping the trap it hid.
+    An intraday trade opens at today's OPEN, so its filter can only use data
+    through yesterday's close. Unlagged, `close < SMA` peeks at the very close
+    it trades into and turns a losing rule into a fake Sharpe 1.9."""
     import pandas as pd
-    from short_intraday import intraday
     from backtest import load
 
     qqq = load("QQQ")
-    day = intraday(qqq)
-    assert abs(day.iloc[0] - (qqq["Close"].iloc[0] / qqq["Open"].iloc[0] - 1)) < 1e-15
-
-    close = qqq["Close"]
-    raw = close < close.rolling(50).mean()
+    day = qqq["Close"] / qqq["Open"] - 1                  # today's session
+    raw = qqq["Close"] < qqq["Close"].rolling(50).mean()
     lagged = raw.shift(1)
-    # the lagged mask on day t is exactly the raw mask on day t-1, never day t
     assert lagged.iloc[5] == raw.iloc[4] and pd.isna(lagged.iloc[0])
-    # and peeking really does inflate the result, so the lag is not cosmetic
     peek = (-day).where(raw.fillna(False), 0.0).loc["2010":]
     honest = (-day).where(lagged.fillna(False), 0.0).loc["2010":]
     assert peek.mean() > 0 > honest.mean()
+
+
+def test_gold_gap_is_real_and_not_one_funds_nav_quirk():
+    """GLD's whole return lives in the close->open gap. Two independent gold
+    funds must agree, or the 'gap' is a print artifact rather than a market."""
+    from backtest import load
+    from strategy import overnight
+
+    for sym in ("GLD", "IAU"):
+        bars = load(sym).loc["2005-02-01":]
+        on = (1 + overnight(bars).dropna()).prod() - 1
+        day = (1 + (bars["Close"] / bars["Open"] - 1)).prod() - 1
+        assert on > 3 * abs(day), f"{sym}: overnight {on:.1%} vs intraday {day:.1%}"
 
 
 if __name__ == "__main__":

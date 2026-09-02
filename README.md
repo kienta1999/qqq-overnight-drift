@@ -290,7 +290,8 @@ scripts/today.py           tonight's decision (Alpaca daily bars)
 scripts/ibkr.py            IB Gateway connection + account snapshot
 scripts/execute.py         places the MOC buy / MOO sell on IBKR
 scripts/test_strategy.py   self-check: no lookahead, cash off-trend, real sleeves
-data/*_daily_yf.csv        QQQ / QLD / TQQQ daily OHLC (yfinance, through 2026-08-28)
+scripts/gold.py            side study: the same rule on GLD/UGL (see Tried and rejected)
+data/*_daily_yf.csv        QQQ / QLD / TQQQ / GLD / UGL / IAU / GDX daily OHLC (yfinance)
 ```
 
 Refresh the data with:
@@ -298,10 +299,41 @@ Refresh the data with:
 ```bash
 uv run --with yfinance python -c "
 import yfinance as yf, pandas as pd
-for s in ('QQQ','QLD','TQQQ'):
+for s in ('QQQ','QLD','TQQQ','GLD','UGL','IAU','GDX'):
     d = yf.download(s, start='1999-01-01', auto_adjust=True, progress=False, actions=False)
     d.columns = d.columns.get_level_values(0)
     d[['Open','High','Low','Close','Volume']].dropna().to_csv(f'data/{s}_daily_yf.csv')
 "
 
 ```
+
+
+## Tried and rejected
+
+**Shorting QQQ during the day.** The mirror trade does not exist. The day
+session is only negative before 2003; since 2010 it drifts **+2 to +3.4 bp/day**,
+so every short variant tested (unconditional, only-when-flat, only-when-trending,
+rvol > 28%, below the 50d, and the combinations) loses money out of sample —
+2010-2026 Sharpe between −0.03 and −0.67, at every SMA window from 20 to 200.
+The overnight edge is that nights are *more* positive, not that days are negative.
+*Trap it hid:* an intraday trade opens at today's **open**, so its filter can only
+use data through yesterday's close. Unlagged, `close < 50d SMA` peeks at the close
+it trades into and reports Sharpe 1.9 on a rule that actually loses.
+`test_intraday_filters_must_be_lagged_a_day` pins this.
+
+**Gold instead of QQQ** (`uv run python scripts/gold.py`). The gap effect is
+*purer* in gold than in QQQ — GLD's entire return is overnight (+10.7% CAGR)
+and its day session is flat (−0.1%), which makes sense: gold futures trade
+nearly 24h, so GLD's gap absorbs the whole Asia/London session. IAU shows the
+same, so it is a market and not one fund's NAV print. But it does not pay as
+well: the rule on GLD earns **+5.0% CAGR / Sharpe 0.53** since 2010 (UGL 2x:
++9.2%, Sharpe 0.53) against **+29.5% / 1.26** for the deployed QQQ book. The
+200d filter does not earn its keep on gold either — it halves CAGR to halve the
+drawdown, Sharpe flat at 0.53-0.72 across every window from 100d to 250d.
+Where gold *is* worth something is as a **diversifier**: the two nightly return
+streams correlate **+0.04**, and 75/25 QQQ/gold lifts the 1x book from Sharpe
+1.09 / −19.5% MaxDD to **1.19 / −14.2%** — better risk, less money.
+
+*Open thread:* GDX (gold miners) overnight is **+30.5% CAGR, Sharpe 1.25** since
+2006 while its day session compounds to −19.0%/yr. Untested as a strategy —
+wider spreads and a much harder borrow than QQQ.
