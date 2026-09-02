@@ -291,6 +291,7 @@ scripts/ibkr.py            IB Gateway connection + account snapshot
 scripts/execute.py         places the MOC buy / MOO sell on IBKR
 scripts/test_strategy.py   self-check: no lookahead, cash off-trend, real sleeves
 scripts/gold.py            side study: the same rule on GLD/UGL (see Tried and rejected)
+scripts/day_gold_night_qqq.py  side study: filling the idle sessions with gold
 data/*_daily_yf.csv        QQQ / QLD / TQQQ / GLD / UGL / IAU / GDX daily OHLC (yfinance)
 ```
 
@@ -333,6 +334,27 @@ drawdown, Sharpe flat at 0.53-0.72 across every window from 100d to 250d.
 Where gold *is* worth something is as a **diversifier**: the two nightly return
 streams correlate **+0.04**, and 75/25 QQQ/gold lifts the 1x book from Sharpe
 1.09 / −19.5% MaxDD to **1.19 / −14.2%** — better risk, less money.
+
+**Filling the idle sessions with gold** (`uv run python scripts/day_gold_night_qqq.py`).
+The book is idle all day, and idle entirely on ~26% of nights. Buying gold in
+those pockets and swapping back into the QQQ sleeve at the close does not work:
+
+- **The day leg loses.** GLD's day session runs +0.3 to +0.9 bp/day gross across
+  every era and needs 1.0 bp to clear a round trip — a coin flip the spread eats.
+  Stacked on the book it takes Sharpe **1.26 → 1.06** (2x UGL: → 0.78). Filtering
+  it by gold's own 200d or by QQQ cash days does not save it.
+- **The night leg pays a little, and costs exactly what it pays.** Holding gold
+  on QQQ cash nights adds ~+1.6% CAGR (29.5% → 31.1% since 2010) for +0.03 Sharpe
+  — but it deepens max drawdown in *every* era (−16.0→−22.5, −18.6→−19.5,
+  −27.5→−32.0, −24.7→−28.3). It is more risk-taking time, not better risk.
+- **There is no crisis premium.** The story was "cash nights are bear markets,
+  exactly when gold is bid." False: gold returns **+4.41 bp** on an average night
+  and **+3.96 bp** on a QQQ cash night. Cash nights are slightly *worse* gold
+  nights, and the leg wins only 51.8% of them.
+
+The lesson generalises: gold diversified the book (Sharpe 1.09 → 1.19) only when
+capital was **split and held simultaneously**. Filling idle time *sequentially*
+diversifies nothing — it just buys more hours of exposure.
 
 *Open thread:* GDX (gold miners) overnight is **+30.5% CAGR, Sharpe 1.25** since
 2006 while its day session compounds to −19.0%/yr. Untested as a strategy —

@@ -105,6 +105,24 @@ def test_gold_gap_is_real_and_not_one_funds_nav_quirk():
         assert on > 3 * abs(day), f"{sym}: overnight {on:.1%} vs intraday {day:.1%}"
 
 
+def test_gold_night_leg_never_double_books_the_capital():
+    """The gold overlays are only addable to the QQQ book because they never
+    claim the same capital at the same moment: the day leg is open->close, and
+    the night leg fires only on nights the QQQ book is already flat."""
+    from backtest import load, load_overnight, strategy_returns
+    from strategy import RVOL_HI, RVOL_LO, overnight, signals
+
+    on_q, close_q = load_overnight()
+    sig = signals(close_q)
+    night, _ = strategy_returns(on_q, sig, RVOL_LO, RVOL_HI, 1e-4)
+    gld_night = overnight(load("GLD")).reindex(close_q.index)
+    leg = gld_night.where(~sig["in_trend"], 0.0).fillna(0.0)
+
+    both = (night != 0) & (leg != 0)
+    assert not both.any(), f"{both.sum()} nights hold QQQ and gold at once"
+    assert (leg != 0).loc["2010":].mean() > 0.05          # the leg does fire
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_"):
