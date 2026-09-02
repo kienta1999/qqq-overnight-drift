@@ -74,6 +74,29 @@ def test_order_types_are_the_auction_orders():
     assert buy.outsideRth is False and sell.account == "U1"
 
 
+def test_intraday_masks_do_not_peek_at_the_close_they_trade_into():
+    """An intraday short opens at today's OPEN, so its filter must be lagged a
+    day. Unlagged, `close < SMA` sees the very close it is trading into -- which
+    turned a losing rule into a fake Sharpe 1.9."""
+    import pandas as pd
+    from short_intraday import intraday
+    from backtest import load
+
+    qqq = load("QQQ")
+    day = intraday(qqq)
+    assert abs(day.iloc[0] - (qqq["Close"].iloc[0] / qqq["Open"].iloc[0] - 1)) < 1e-15
+
+    close = qqq["Close"]
+    raw = close < close.rolling(50).mean()
+    lagged = raw.shift(1)
+    # the lagged mask on day t is exactly the raw mask on day t-1, never day t
+    assert lagged.iloc[5] == raw.iloc[4] and pd.isna(lagged.iloc[0])
+    # and peeking really does inflate the result, so the lag is not cosmetic
+    peek = (-day).where(raw.fillna(False), 0.0).loc["2010":]
+    honest = (-day).where(lagged.fillna(False), 0.0).loc["2010":]
+    assert peek.mean() > 0 > honest.mean()
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_"):
