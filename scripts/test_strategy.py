@@ -123,6 +123,26 @@ def test_gold_night_leg_never_double_books_the_capital():
     assert (leg != 0).loc["2010":].mean() > 0.05          # the leg does fire
 
 
+def test_levered_miner_sleeves_still_run_the_leverage_we_think():
+    """NUGT was 3x until 2020 and 2x since. A data refresh that silently changes
+    a sleeve's leverage would rewrite every miners conclusion, so pin the regimes
+    to realized beta rather than to a remembered date."""
+    import pandas as pd
+    from backtest import load
+    from strategy import overnight
+
+    gdx = overnight(load("GDX"))
+
+    def beta(sym, a, b):
+        y = overnight(load(sym)).loc[a:b]
+        p = pd.concat([y, gdx.loc[a:b]], axis=1, sort=True).dropna()
+        return p.cov().iloc[0, 1] / p.iloc[:, 1].var()
+
+    assert 2.8 < beta("NUGT", "2013-01-01", "2019-12-31") < 3.2      # the 3x era
+    assert 1.8 < beta("NUGT", "2021-01-01", "2026-12-31") < 2.2      # the 2x era
+    assert 2.8 < beta("GDXU", "2021-01-01", "2026-12-31") < 3.2      # 3x throughout
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_"):
