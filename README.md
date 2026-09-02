@@ -356,6 +356,45 @@ The lesson generalises: gold diversified the book (Sharpe 1.09 → 1.19) only wh
 capital was **split and held simultaneously**. Filling idle time *sequentially*
 diversifies nothing — it just buys more hours of exposure.
 
-*Open thread:* GDX (gold miners) overnight is **+30.5% CAGR, Sharpe 1.25** since
-2006 while its day session compounds to −19.0%/yr. Untested as a strategy —
-wider spreads and a much harder borrow than QQQ.
+## Gold: what is actually interesting
+
+Nothing here is deployed — `execute.py` still runs QQQ only. Run
+`uv run python scripts/gold.py` for all of it.
+
+**1. Gold miners have the widest overnight/intraday split of anything tested.**
+GDX overnight is **+30.5% CAGR, Sharpe 1.25** since 2006; its day session
+compounds to **−19.0%/yr**; buy & hold is +5.6%. The mechanism is structural —
+GDX is an *equity that only trades US hours* sitting on an underlying that
+trades all night, so gold's overnight move can only reach the miners through
+the gap. It is positive in all four eras (+66.1% / +7.3% / +32.3% / +16.4%),
+but clearly decaying.
+
+**2. It is not merely levered gold.** GDX's night is a 1.56x gold-gap position
+(corr +0.87). Strip that beta out and the residual still pays **+12.4% CAGR at
+Sharpe 1.09** — so there is miner-specific overnight return on top of the gold
+exposure, and you get the 1.6x without a leveraged ETF's decay.
+
+**3. The 200d filter is actively harmful on GDX** — the reverse of QQQ. It cuts
+the overnight book from +30.5% to **+8.5%** (Sharpe 1.25 → 0.58). Gold's gap
+does not care which side of a moving average the miners closed on; filtering
+just removes paid nights. Do not port the QQQ rule over unexamined.
+
+**4. Shorting GDX intraday is dead, and died recently.** +31.4% / +29.8% CAGR
+in 2006-2011 and 2012-2015, then **−7.5% and −11.5%** in 2016-2020 and 2021-2026
+as the day leg went from −14 bp/day to +2.4 bp/day. Same decay as the QQQ short,
+and that is before borrow fees on a 33%-vol short.
+
+**5. The only gold idea that improved the deployed book** — held *simultaneously*
+with split capital, 2010+, correlation **+0.04**:
+
+| Split | CAGR | Sharpe | MaxDD |
+|---|---:|---:|---:|
+| 100% QQQ book (deployed) | +29.1% | 1.25 | −33.5% |
+| 85 / 15 QQQ / UGL 2x | +26.6% | 1.31 | −24.5% |
+| **75 / 25 QQQ / UGL 2x** | +24.8% | **1.34** | −24.2% |
+| 75 / 25 QQQ / GLD | +23.3% | 1.31 | −22.8% |
+| 75 / 25 QQQ / GDX | +23.5% | 1.28 | −24.4% |
+
+That is a real trade: ~9 points of max drawdown for ~4 points of CAGR. It is a
+risk preference, not free money — take it only if −33.5% is the number that
+would make you abandon the strategy.
