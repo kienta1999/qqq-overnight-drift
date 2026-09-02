@@ -290,9 +290,12 @@ scripts/today.py           tonight's decision (Alpaca daily bars)
 scripts/ibkr.py            IB Gateway connection + account snapshot
 scripts/execute.py         places the MOC buy / MOO sell on IBKR
 scripts/test_strategy.py   self-check: no lookahead, cash off-trend, real sleeves
-scripts/gold.py            side study: the same rule on GLD/UGL (see Tried and rejected)
+scripts/compare.py         SPY vs QQQ vs GDX, 1x/2x/3x, one window one cost
+scripts/gold.py            side study: the same rule on GLD/UGL/GDX
+scripts/miners.py          side study: miners — hodl vs 1x/2x/3x overnight
 scripts/day_gold_night_qqq.py  side study: filling the idle sessions with gold
-data/*_daily_yf.csv        QQQ / QLD / TQQQ / GLD / UGL / IAU / GDX daily OHLC (yfinance)
+data/*_daily_yf.csv        SPY/SSO/UPRO, QQQ/QLD/TQQQ, GLD/UGL/IAU,
+                           GDX/GDXJ/NUGT/GDXU/JNUG/DUST daily OHLC (yfinance)
 ```
 
 Refresh the data with:
@@ -308,6 +311,68 @@ for s in ('QQQ','QLD','TQQQ','GLD','UGL','IAU','GDX'):
 
 ```
 
+
+## Every sleeve on one footing
+
+`uv run python scripts/compare.py` — the numbers elsewhere in this README are
+*not* comparable to each other (different windows, spreads and filters). These
+are: same window, **1bp/side on every traded night**, same code path. Levered
+sleeves are real where they existed and calibrated-synthetic before (corr 0.989
+to 0.997; the script prints the calibration).
+
+**2006-05-23 → 2026-08-31**
+
+| Strategy | CAGR | Sharpe | Vol | MaxDD | $5,000 becomes |
+|---|---:|---:|---:|---:|---:|
+| SPY buy & hold | +11.4% | 0.65 | 19.4% | −55.2% | $44,445 |
+| SPY overnight 1x | +2.6% | 0.28 | 11.7% | −29.8% | $8,475 |
+| SPY overnight 2x (SSO) | +8.8% | 0.48 | 23.3% | −53.9% | $27,627 |
+| SPY overnight 3x (UPRO) | +11.7% | 0.50 | 35.1% | −70.0% | $47,066 |
+| QQQ buy & hold | +16.4% | 0.80 | 22.1% | −53.4% | $108,635 |
+| QQQ overnight 1x | +6.2% | 0.53 | 12.8% | −30.8% | $16,767 |
+| QQQ overnight 2x (QLD) | +14.9% | 0.67 | 25.6% | −55.1% | $82,407 |
+| QQQ overnight 3x (TQQQ) | +22.7% | 0.73 | 38.0% | −69.6% | $312,951 |
+| GDX overnight 1x | +24.2% | 1.04 | 23.4% | −31.5% | $402,111 |
+| GDX buy & hold | +5.7% | 0.34 | 41.4% | −80.6% | $15,290 |
+| **deployed book** (vol-switch + 200d) | **+24.4%** | **1.13** | 21.3% | −34.3% | **$415,092** |
+
+**With the 200d filter, at each fixed leverage**
+
+| Strategy | CAGR | Sharpe | Vol | MaxDD | $5,000 becomes |
+|---|---:|---:|---:|---:|---:|
+| SPY + 200d 1x | +3.6% | 0.54 | 6.9% | −18.4% | $10,129 |
+| SPY + 200d 2x | +9.7% | 0.74 | 13.9% | −33.7% | $32,561 |
+| SPY + 200d 3x | +15.9% | 0.81 | 20.8% | −45.1% | $98,296 |
+| QQQ + 200d 1x | +7.6% | 0.85 | 9.1% | −19.6% | $22,066 |
+| QQQ + 200d 2x | +17.2% | 0.97 | 18.0% | −36.3% | $124,449 |
+| **QQQ + 200d 3x** | **+29.2%** | **1.08** | 27.0% | −49.8% | **$888,439** |
+| GDX + 200d 1x | +7.3% | 0.51 | 16.2% | −34.6% | $20,664 |
+
+**What to take from it**
+
+1. **The deployed book ties GDX overnight on CAGR (+24.4% vs +24.2%) and beats
+   it on Sharpe** (1.13 vs 1.04), on 214 nights instead of 252. There is nothing
+   to switch to.
+2. **The filter is load-bearing, not the leverage.** QQQ+200d at 3x makes +29.2%
+   with a −49.8% drawdown; unfiltered TQQQ overnight makes *less* (+22.7%) with
+   *more* pain (−69.6%). Twenty points of drawdown come from the filter alone.
+3. **A flat cost against an uneven edge is why SPY overnight is worthless and
+   GDX overnight is not.** Gross overnight edge per night over this window:
+
+   | | edge/night | a 2bp round trip eats |
+   |---|---:|---:|
+   | SPY | 3.29bp | **61%** |
+   | QQQ | 4.70bp | 43% |
+   | GDX | 11.62bp | **17%** |
+
+   That is the whole distance between the +2.6% and +24.2% rows. SPY overnight
+   turns negative at ~2.5bp/side. Any daily-turnover strategy lives or dies on
+   edge-per-night *relative to its spread*, so check that ratio before adding a
+   sleeve — not the backtested CAGR.
+4. **GDX's headline is carried by 2006–2009.** On the real-ETF-only window
+   (2010-02+) it falls to **+15.7%, Sharpe 0.76** while the QQQ sleeves hold up
+   (TQQQ overnight +27.6%). Re-run `compare.py` and read the second table before
+   ever acting on the first.
 
 ## Tried and rejected
 
