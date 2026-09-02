@@ -21,7 +21,7 @@ on:
     inputs:
       capital:
         description: "Capital to size the order against"
-        default: "20000"
+        default: "5000"
 
 permissions:
   issues: write
@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TITLE: "Today's QQQ overnight decision"
-      CAPITAL: ${{ inputs.capital || '20000' }}
+      CAPITAL: ${{ inputs.capital || '5000' }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Skip if the close has already passed
